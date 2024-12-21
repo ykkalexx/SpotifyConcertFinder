@@ -2,11 +2,20 @@ import express from "express";
 import dotenv from "dotenv";
 import { closePool, initDB } from "./config/database";
 import { logger } from "./utils/logger";
+import spotifyRoutes from "./routes/spotifyRoutes";
+import discordBotRoutes from "./routes/discordBotRoutes";
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// setup router
+app.use("/api/v1", spotifyRoutes);
+app.use("/api/v1", discordBotRoutes);
 
 async function startServer() {
   try {
