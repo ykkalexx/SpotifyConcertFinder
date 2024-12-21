@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon",
-    "build": "tsc"
+    "build": "tsc",
+    "migrate": "ts-node src/scripts/runMigrations.ts"
   },
   "keywords": [],
   "author": "",
