@@ -45,7 +45,7 @@ export class SpotifyService {
     }
   }
 
-  // function used to get user profile and save it to the database
+  // function used to get user profile
   async getUserProfile(username: string): Promise<User> {
     try {
       await this.authenticate();
@@ -71,7 +71,7 @@ export class SpotifyService {
     }
   }
 
-  // function used to get user top artists and save it to the database
+  // function used to get user top artists
   async getUserTopArtists(username: string): Promise<Artist[]> {
     try {
       await this.authenticate();
