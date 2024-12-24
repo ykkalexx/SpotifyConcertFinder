@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-import { pool } from "../config/database";
 import { logger } from "../utils/logger";
 import { SpotifyController } from "./SpotifyControllers";
 import axios from "axios";
@@ -14,11 +13,15 @@ export class DiscordBotControllers {
 
   async fetchUserInfo(req: Request, res: Response): Promise<void> {
     try {
-      const { username } = req.params;
-      if (!username) {
-        res.status(400).send("Username is required");
+      const { discord_id, username } = req.params;
+      if (!username || !discord_id) {
+        res.status(400).send("Username or Discord ID is required");
         return;
       }
+
+      const token = axios.post(
+        `${this.backendUrl}/spotify/store-token/${discord_id}`
+      );
 
       const user = axios.get(
         `${this.backendUrl}/spotify/get_profile/${username}`
@@ -28,9 +31,17 @@ export class DiscordBotControllers {
         `${this.backendUrl}/spotify/get_top_artists/${username}`
       );
 
-      const [userData, artistsData] = await Promise.all([user, artists]);
+      const [userData, artistsData, userToken] = await Promise.all([
+        user,
+        artists,
+        token,
+      ]);
 
-      res.status(200).send({ user: userData.data, artists: artistsData.data });
+      res.status(200).send({
+        user: userData.data,
+        artists: artistsData.data,
+        token: userToken.data,
+      });
     } catch (error) {
       logger.error("Error saving user profile:", error);
       res.status(500).send("Failed to save user profile");

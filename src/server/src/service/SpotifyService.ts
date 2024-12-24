@@ -115,7 +115,7 @@ export class SpotifyService {
     }
   }
 
-  // Get user profile with Discord integration
+  // Get user profile
   async getUserProfile(username: string, discordId: string): Promise<User> {
     try {
       const token = await this.getUserToken(discordId);
@@ -147,7 +147,7 @@ export class SpotifyService {
     }
   }
 
-  // Get user top artists with Discord integration
+  // Get user top artists
   async getUserTopArtists(discordId: string): Promise<Artist[]> {
     try {
       const token = await this.getUserToken(discordId);
