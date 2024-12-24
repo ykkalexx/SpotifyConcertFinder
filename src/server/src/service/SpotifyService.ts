@@ -18,7 +18,7 @@ interface User extends BaseEntity {
 interface Artist extends BaseEntity {
   spotify_id: string;
   name: string;
-  genres: string[];
+  genres: string[]; // This is fine as-is because we'll handle the JSON conversion in the controller
   popularity: number;
 }
 

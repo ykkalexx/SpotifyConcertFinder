@@ -6,7 +6,7 @@ import axios from "axios";
 
 export class DiscordBotControllers {
   private spotifyController: SpotifyController;
-  private backendUrl: string = "http://localhost:3000";
+  private backendUrl: string = "http://localhost:3000/api/v1";
 
   constructor() {
     this.spotifyController = new SpotifyController();

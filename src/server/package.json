@@ -13,7 +13,9 @@
   "license": "ISC",
   "devDependencies": {
     "@types/express": "^5.0.0",
+    "@types/mysql": "^2.15.26",
     "@types/node": "^22.10.1",
+    "@types/node-cron": "^3.0.11",
     "express": "^4.21.2",
     "nodemon": "^3.1.7",
     "pg": "^8.13.1",
@@ -26,6 +28,8 @@
     "@types/spotify-web-api-node": "^5.0.11",
     "@types/winston": "^2.4.4",
     "dotenv": "^16.4.7",
+    "mysql2": "^3.12.0",
+    "node-cron": "^3.0.3",
     "spotify-web-api-node": "^5.0.2",
     "winston": "^3.17.0"
   }

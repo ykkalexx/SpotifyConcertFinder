@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { SpotifyService } from "../service/SpotifyService";
 import { pool } from "../config/database";
 import { logger } from "../utils/logger";
+import { RowDataPacket, ResultSetHeader } from "mysql2";
 
 export class SpotifyController {
   private spotifyService: SpotifyService;
@@ -10,9 +11,8 @@ export class SpotifyController {
     this.spotifyService = new SpotifyService();
   }
 
-  // controller for user profile and save it to the database
   async GetAndSaveUserProfile(req: Request, res: Response): Promise<void> {
-    const client = await pool.connect();
+    const connection = await pool.getConnection();
     try {
       const username = req.params.username;
       if (!username) {
@@ -23,57 +23,53 @@ export class SpotifyController {
       const user = await this.spotifyService.getUserProfile(username);
 
       //begin transaction
-      await client.query("BEGIN");
+      await connection.beginTransaction();
 
       // Check if user already exists
-      const existingUser = await client.query(
-        "SELECT id FROM users WHERE spotify_id = $1",
+      const [existingUsers] = await connection.query<RowDataPacket[]>(
+        "SELECT id FROM users WHERE spotify_id = ?",
         [user.spotify_id]
       );
 
       let userId;
-      if (existingUser.rows.length > 0) {
+      if (existingUsers.length > 0) {
         // updating user
-        const result = await client.query(
+        const [result] = await connection.query<ResultSetHeader>(
           `UPDATE users 
-             SET display_name = $1, updated_at = NOW() 
-             WHERE spotify_id = $2 
-             RETURNING id`,
+           SET display_name = ?, updated_at = NOW() 
+           WHERE spotify_id = ?`,
           [user.display_name, user.spotify_id]
         );
-        userId = result.rows[0].id;
+        userId = existingUsers[0].id;
         logger.info(`Updated user with ID: ${userId}`);
       } else {
         // creating new user
-        const result = await client.query(
+        const [result] = await connection.query<ResultSetHeader>(
           `INSERT INTO users (spotify_id, display_name, created_at, updated_at) 
-            VALUES ($1, $2, NOW(), NOW()) 
-            RETURNING id`,
+           VALUES (?, ?, NOW(), NOW())`,
           [user.spotify_id, user.display_name]
         );
-        userId = result.rows[0].id;
+        userId = result.insertId;
         logger.info(`Created new user with ID: ${userId}`);
       }
 
-      await client.query("COMMIT");
+      await connection.commit();
 
-      // Return success response
       res.status(200).json({
         message: "User profile saved successfully",
         user: { ...user, id: userId },
       });
     } catch (error) {
-      await client.query("ROLLBACK");
+      await connection.rollback();
       logger.error("Error saving user profile:", error);
       res.status(500).send("Failed to save user profile");
     } finally {
-      client.release();
+      connection.release();
     }
   }
 
-  // controller for saving user's top artists
   async GetAndSaveTopArtists(req: Request, res: Response): Promise<void> {
-    const client = await pool.connect();
+    const connection = await pool.getConnection();
     try {
       const username = req.params.username;
       if (!username) {
@@ -81,83 +77,80 @@ export class SpotifyController {
         return;
       }
 
-      // Get user's top artists from Spotify
       const artists = await this.spotifyService.getUserTopArtists(username);
 
       // Get user ID
-      const userResult = await client.query(
-        "SELECT id FROM users WHERE spotify_id = $1",
+      const [users] = await connection.query<RowDataPacket[]>(
+        "SELECT id FROM users WHERE spotify_id = ?",
         [username]
       );
 
-      if (userResult.rows.length === 0) {
+      if (users.length === 0) {
         res.status(404).json({ error: "User not found" });
         return;
       }
 
-      const userId = userResult.rows[0].id;
+      const userId = users[0].id;
 
-      await client.query("BEGIN");
+      await connection.beginTransaction();
 
-      // Save each artist and create user-artist relationship
       const savedArtists = [];
       for (const artist of artists) {
         // Check if artist exists
-        let artistId;
-        const existingArtist = await client.query(
-          "SELECT id FROM artists WHERE spotify_id = $1",
+        const [existingArtists] = await connection.query<RowDataPacket[]>(
+          "SELECT id FROM artists WHERE spotify_id = ?",
           [artist.spotify_id]
         );
 
-        if (existingArtist.rows.length > 0) {
+        let artistId;
+        if (existingArtists.length > 0) {
           // Update existing artist
-          artistId = existingArtist.rows[0].id;
-          await client.query(
+          artistId = existingArtists[0].id;
+          await connection.query(
             `UPDATE artists 
-             SET name = $1, genres = $2, popularity = $3, updated_at = NOW()
-             WHERE id = $4`,
+             SET name = ?, genres = ?, popularity = ?, updated_at = NOW()
+             WHERE id = ?`,
             [artist.name, artist.genres, artist.popularity, artistId]
           );
         } else {
           // Insert new artist
-          const newArtist = await client.query(
+          const [result] = await connection.query<ResultSetHeader>(
             `INSERT INTO artists (spotify_id, name, genres, popularity, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, NOW(), NOW())
-             RETURNING id`,
+             VALUES (?, ?, ?, ?, NOW(), NOW())`,
             [artist.spotify_id, artist.name, artist.genres, artist.popularity]
           );
-          artistId = newArtist.rows[0].id;
+          artistId = result.insertId;
         }
 
-        // Upsert user_artists relationship
-        await client.query(
+        // Upsert user_artists relationship (using MySQL syntax)
+        await connection.query(
           `INSERT INTO user_artists (user_id, artist_id, last_listened, play_count, created_at, updated_at)
-           VALUES ($1, $2, NOW(), 1, NOW(), NOW())
-           ON CONFLICT (user_id, artist_id) 
-           DO UPDATE SET play_count = user_artists.play_count + 1, 
-                        last_listened = NOW(),
-                        updated_at = NOW()`,
+           VALUES (?, ?, NOW(), 1, NOW(), NOW())
+           ON DUPLICATE KEY UPDATE 
+             play_count = play_count + 1,
+             last_listened = NOW(),
+             updated_at = NOW()`,
           [userId, artistId]
         );
 
         savedArtists.push({ ...artist, id: artistId });
       }
 
-      await client.query("COMMIT");
+      await connection.commit();
 
       res.status(200).json({
         message: "Top artists saved successfully",
         artists: savedArtists,
       });
     } catch (error) {
-      await client.query("ROLLBACK");
+      await connection.rollback();
       logger.error("Error saving top artists:", error);
       res.status(500).json({
         error: "Failed to save top artists",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     } finally {
-      client.release();
+      connection.release();
     }
   }
 }

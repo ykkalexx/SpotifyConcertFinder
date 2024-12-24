@@ -12,4 +12,4 @@ fi
 cd src/server
 
 echo -e "${GREEN}Starting server...${NC}"
-npm run start
+npm start

@@ -9,7 +9,3 @@
 `/fetch-concert/:{user}`
 
 - To get a list of nearby concerts for their top 5 artists and get the nearby concerts
-
-`/listening-habits/:{user}`
-
-- Create an API that analyzes a user's Spotify playback data to generate insights like most-played songs, genres, or artists over different periods.
