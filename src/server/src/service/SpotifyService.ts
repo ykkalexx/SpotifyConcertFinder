@@ -1,5 +1,7 @@
 import SpotifyWebApi from "spotify-web-api-node";
 import { logger } from "../utils/logger";
+import { pool } from "../config/database";
+import { RowDataPacket } from "mysql2";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -13,13 +15,20 @@ interface BaseEntity {
 interface User extends BaseEntity {
   spotify_id: string;
   display_name: string;
+  discord_id?: string;
 }
 
 interface Artist extends BaseEntity {
   spotify_id: string;
   name: string;
-  genres: string[]; // This is fine as-is because we'll handle the JSON conversion in the controller
+  genres: string[];
   popularity: number;
+}
+
+interface SpotifyToken {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
 }
 
 export class SpotifyService {
@@ -29,26 +38,92 @@ export class SpotifyService {
     this.spotify = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI,
     });
   }
 
-  // function used to get spotify access token
-  async authenticate(): Promise<void> {
+  setAccessToken(token: string): void {
+    this.spotify.setAccessToken(token);
+  }
+
+  // Store Spotify tokens for a Discord user
+  async storeUserTokens(
+    discordId: string,
+    tokens: SpotifyToken
+  ): Promise<void> {
+    const connection = await pool.getConnection();
     try {
-      const data = await this.spotify.clientCredentialsGrant();
-      this.spotify.setAccessToken(data.body.access_token);
-      logger.info("Successfully authenticated with Spotify");
-    } catch (error) {
-      logger.error("Error authenticating with Spotify:", error);
-      throw new Error("Failed to authenticate with Spotify");
+      await connection.query(
+        `INSERT INTO user_tokens 
+         (discord_id, access_token, refresh_token, expires_at, created_at, updated_at)
+         VALUES (?, ?, ?, NOW() + INTERVAL ? SECOND, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE 
+         access_token = ?, 
+         refresh_token = ?,
+         expires_at = NOW() + INTERVAL ? SECOND,
+         updated_at = NOW()`,
+        [
+          discordId,
+          tokens.access_token,
+          tokens.refresh_token,
+          tokens.expires_in,
+          tokens.access_token,
+          tokens.refresh_token,
+          tokens.expires_in,
+        ]
+      );
+    } finally {
+      connection.release();
     }
   }
 
-  // function used to get user profile
-  async getUserProfile(username: string): Promise<User> {
+  // Get stored token for a Discord user
+  async getUserToken(discordId: string): Promise<string | null> {
+    const connection = await pool.getConnection();
     try {
-      await this.authenticate();
+      const [rows] = await connection.query<RowDataPacket[]>(
+        `SELECT access_token, refresh_token, expires_at 
+         FROM user_tokens 
+         WHERE discord_id = ?`,
+        [discordId]
+      );
+
+      if (!rows.length) {
+        return null;
+      }
+
+      // Check if token needs refresh
+      const expiresAt = new Date(rows[0].expires_at);
+      if (expiresAt < new Date()) {
+        // Token expired, refresh it
+        this.spotify.setRefreshToken(rows[0].refresh_token);
+        const refreshedTokens = await this.spotify.refreshAccessToken();
+        await this.storeUserTokens(discordId, {
+          access_token: refreshedTokens.body.access_token,
+          refresh_token:
+            refreshedTokens.body.refresh_token || rows[0].refresh_token,
+          expires_in: refreshedTokens.body.expires_in,
+        });
+        return refreshedTokens.body.access_token;
+      }
+
+      return rows[0].access_token;
+    } catch (error) {
+      logger.error("Error getting user token:", error);
+      return null;
+    } finally {
+      connection.release();
+    }
+  }
+
+  // Get user profile with Discord integration
+  async getUserProfile(username: string, discordId: string): Promise<User> {
+    try {
+      const token = await this.getUserToken(discordId);
+      if (!token) {
+        throw new Error("User not authenticated with Spotify");
+      }
+
+      this.setAccessToken(token);
       const response = await this.spotify.getUser(username);
 
       if (response.statusCode !== 200) {
@@ -56,9 +131,10 @@ export class SpotifyService {
       }
 
       const user: User = {
-        id: 0, // This will be set by database
+        id: 0,
         spotify_id: response.body.id,
         display_name: response.body.display_name || username,
+        discord_id: discordId,
         created_at: new Date(),
         updated_at: new Date(),
       };
@@ -67,35 +143,36 @@ export class SpotifyService {
       return user;
     } catch (error) {
       logger.error("Error fetching user profile from Spotify:", error);
-      throw new Error("Failed to fetch user profile from Spotify");
+      throw error;
     }
   }
 
-  // function used to get user top artists
-  async getUserTopArtists(username: string): Promise<Artist[]> {
+  // Get user top artists with Discord integration
+  async getUserTopArtists(discordId: string): Promise<Artist[]> {
     try {
-      await this.authenticate();
+      const token = await this.getUserToken(discordId);
+      if (!token) {
+        throw new Error("User not authenticated with Spotify");
+      }
+
+      this.setAccessToken(token);
       const response = await this.spotify.getMyTopArtists({ limit: 5 });
-      const artist = response.body.items.map((item) => {
-        return {
-          id: 0, // This will be set by database
-          spotify_id: item.id,
-          name: item.name,
-          genres: item.genres,
-          popularity: item.popularity,
-          created_at: new Date(),
-          updated_at: new Date(),
-        };
-      });
+
+      const artists = response.body.items.map((item) => ({
+        id: 0,
+        spotify_id: item.id,
+        name: item.name,
+        genres: item.genres,
+        popularity: item.popularity,
+        created_at: new Date(),
+        updated_at: new Date(),
+      }));
 
       logger.info("Successfully fetched user top artists from Spotify");
-      return artist;
+      return artists;
     } catch (error) {
-      logger.error(
-        `Error fetching user top for ${username}  artists from Spotify:`,
-        error
-      );
-      throw new Error("Failed to fetch user top artists from Spotify");
+      logger.error("Error fetching user top artists from Spotify:", error);
+      throw error;
     }
   }
 }

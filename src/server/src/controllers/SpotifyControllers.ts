@@ -14,21 +14,23 @@ export class SpotifyController {
   async GetAndSaveUserProfile(req: Request, res: Response): Promise<void> {
     const connection = await pool.getConnection();
     try {
-      const username = req.params.username;
-      if (!username) {
-        res.status(400).send("Username is required");
+      const { username, discordId } = req.params;
+      if (!username || !discordId) {
+        res.status(400).send("Username and Discord ID are required");
         return;
       }
 
-      const user = await this.spotifyService.getUserProfile(username);
+      const user = await this.spotifyService.getUserProfile(
+        username,
+        discordId
+      );
 
-      //begin transaction
       await connection.beginTransaction();
 
       // Check if user already exists
       const [existingUsers] = await connection.query<RowDataPacket[]>(
-        "SELECT id FROM users WHERE spotify_id = ?",
-        [user.spotify_id]
+        "SELECT id FROM users WHERE discord_id = ?",
+        [discordId]
       );
 
       let userId;
@@ -36,18 +38,18 @@ export class SpotifyController {
         // updating user
         const [result] = await connection.query<ResultSetHeader>(
           `UPDATE users 
-           SET display_name = ?, updated_at = NOW() 
-           WHERE spotify_id = ?`,
-          [user.display_name, user.spotify_id]
+           SET spotify_id = ?, display_name = ?, updated_at = NOW() 
+           WHERE discord_id = ?`,
+          [user.spotify_id, user.display_name, discordId]
         );
         userId = existingUsers[0].id;
         logger.info(`Updated user with ID: ${userId}`);
       } else {
         // creating new user
         const [result] = await connection.query<ResultSetHeader>(
-          `INSERT INTO users (spotify_id, display_name, created_at, updated_at) 
-           VALUES (?, ?, NOW(), NOW())`,
-          [user.spotify_id, user.display_name]
+          `INSERT INTO users (discord_id, spotify_id, display_name, created_at, updated_at) 
+           VALUES (?, ?, ?, NOW(), NOW())`,
+          [discordId, user.spotify_id, user.display_name]
         );
         userId = result.insertId;
         logger.info(`Created new user with ID: ${userId}`);
@@ -71,18 +73,16 @@ export class SpotifyController {
   async GetAndSaveTopArtists(req: Request, res: Response): Promise<void> {
     const connection = await pool.getConnection();
     try {
-      const username = req.params.username;
-      if (!username) {
-        res.status(400).json({ error: "Username is required" });
+      const { discordId } = req.params;
+      if (!discordId) {
+        res.status(400).json({ error: "Discord ID is required" });
         return;
       }
 
-      const artists = await this.spotifyService.getUserTopArtists(username);
-
       // Get user ID
       const [users] = await connection.query<RowDataPacket[]>(
-        "SELECT id FROM users WHERE spotify_id = ?",
-        [username]
+        "SELECT id FROM users WHERE discord_id = ?",
+        [discordId]
       );
 
       if (users.length === 0) {
@@ -91,6 +91,8 @@ export class SpotifyController {
       }
 
       const userId = users[0].id;
+
+      const artists = await this.spotifyService.getUserTopArtists(discordId);
 
       await connection.beginTransaction();
 
@@ -104,25 +106,34 @@ export class SpotifyController {
 
         let artistId;
         if (existingArtists.length > 0) {
-          // Update existing artist
           artistId = existingArtists[0].id;
           await connection.query(
             `UPDATE artists 
              SET name = ?, genres = ?, popularity = ?, updated_at = NOW()
              WHERE id = ?`,
-            [artist.name, artist.genres, artist.popularity, artistId]
+            [
+              artist.name,
+              JSON.stringify(artist.genres),
+              artist.popularity,
+              artistId,
+            ]
           );
         } else {
           // Insert new artist
           const [result] = await connection.query<ResultSetHeader>(
             `INSERT INTO artists (spotify_id, name, genres, popularity, created_at, updated_at)
              VALUES (?, ?, ?, ?, NOW(), NOW())`,
-            [artist.spotify_id, artist.name, artist.genres, artist.popularity]
+            [
+              artist.spotify_id,
+              artist.name,
+              JSON.stringify(artist.genres),
+              artist.popularity,
+            ]
           );
           artistId = result.insertId;
         }
 
-        // Upsert user_artists relationship (using MySQL syntax)
+        // Upsert user_artists relationship
         await connection.query(
           `INSERT INTO user_artists (user_id, artist_id, last_listened, play_count, created_at, updated_at)
            VALUES (?, ?, NOW(), 1, NOW(), NOW())
@@ -133,7 +144,14 @@ export class SpotifyController {
           [userId, artistId]
         );
 
-        savedArtists.push({ ...artist, id: artistId });
+        savedArtists.push({
+          ...artist,
+          id: artistId,
+          genres:
+            typeof artist.genres === "string"
+              ? JSON.parse(artist.genres)
+              : artist.genres,
+        });
       }
 
       await connection.commit();
