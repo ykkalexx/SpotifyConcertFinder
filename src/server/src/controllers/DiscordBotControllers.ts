@@ -1,50 +1,52 @@
 import { Request, Response } from "express";
 import { logger } from "../utils/logger";
-import { SpotifyController } from "./SpotifyControllers";
 import axios from "axios";
 
 export class DiscordBotControllers {
-  private spotifyController: SpotifyController;
   private backendUrl: string = "http://localhost:3000/api/v1";
-
-  constructor() {
-    this.spotifyController = new SpotifyController();
-  }
 
   async fetchUserInfo(req: Request, res: Response): Promise<void> {
     try {
-      const { discord_id, username } = req.params;
-      if (!username || !discord_id) {
-        res.status(400).send("Username or Discord ID is required");
+      const { discord_id } = req.params;
+      if (!discord_id) {
+        res.status(400).send("Discord ID is required");
         return;
       }
 
-      const token = axios.post(
-        `${this.backendUrl}/spotify/store-token/${discord_id}`
-      );
+      try {
+        // Try to get user data first
+        const [userResponse, artistsResponse] = await Promise.all([
+          axios.get(`${this.backendUrl}/spotify/profile/${discord_id}`),
+          axios.get(`${this.backendUrl}/spotify/top-artists/${discord_id}`),
+        ]);
 
-      const user = axios.get(
-        `${this.backendUrl}/spotify/get_profile/${username}`
-      );
+        res.status(200).json({
+          connected: true,
+          user: userResponse.data,
+          artists: artistsResponse.data,
+        });
+      } catch (error) {
+        // If unauthorized, get auth URL
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          const authResponse = await axios.get(
+            `${this.backendUrl}/spotify/auth/${discord_id}`
+          );
 
-      const artists = axios.get(
-        `${this.backendUrl}/spotify/get_top_artists/${username}`
-      );
-
-      const [userData, artistsData, userToken] = await Promise.all([
-        user,
-        artists,
-        token,
-      ]);
-
-      res.status(200).send({
-        user: userData.data,
-        artists: artistsData.data,
-        token: userToken.data,
-      });
+          res.status(200).json({
+            connected: false,
+            authUrl: authResponse.data.authUrl,
+            message: "Click this link to connect your Spotify account",
+          });
+          return;
+        }
+        throw error; // Re-throw other errors
+      }
     } catch (error) {
-      logger.error("Error saving user profile:", error);
-      res.status(500).send("Failed to save user profile");
+      logger.error("Error in fetchUserInfo:", error);
+      res.status(500).json({
+        error: "Something went wrong",
+        message: "Failed to process your request",
+      });
     }
   }
 }

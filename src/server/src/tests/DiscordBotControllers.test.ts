@@ -1,30 +1,29 @@
 import { Request, Response } from "express";
 import { DiscordBotControllers } from "../controllers/DiscordBotControllers";
-import { SpotifyController } from "../controllers/SpotifyControllers";
 import axios from "axios";
 import { logger } from "../utils/logger";
 
 jest.mock("axios");
 jest.mock("../utils/logger");
-jest.mock("../controllers/SpotifyControllers");
 
 describe("DiscordBotControllers", () => {
   let discordBotController: DiscordBotControllers;
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
+  const backendUrl = "http://localhost:3000/api/v1";
 
   beforeEach(() => {
     jest.clearAllMocks();
 
     mockReq = {
       params: {
-        username: "testuser",
         discord_id: "123456",
       },
     };
 
     mockRes = {
       status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
       send: jest.fn(),
     };
 
@@ -32,12 +31,20 @@ describe("DiscordBotControllers", () => {
   });
 
   describe("fetchUserInfo", () => {
-    it("should fetch user info successfully", async () => {
-      const mockUserData = { data: { id: 1, name: "Test User" } };
-      const mockArtistsData = { data: [{ id: 1, name: "Artist 1" }] };
-      const mockTokenData = { data: { access_token: "token123" } };
+    it("should fetch user info successfully when authenticated", async () => {
+      const mockUserData = {
+        data: {
+          id: "spotify-123",
+          display_name: "Test User",
+        },
+      };
+      const mockArtistsData = {
+        data: [
+          { id: "artist-1", name: "Artist 1" },
+          { id: "artist-2", name: "Artist 2" },
+        ],
+      };
 
-      (axios.post as jest.Mock).mockResolvedValueOnce(mockTokenData);
       (axios.get as jest.Mock)
         .mockResolvedValueOnce(mockUserData)
         .mockResolvedValueOnce(mockArtistsData);
@@ -48,14 +55,41 @@ describe("DiscordBotControllers", () => {
       );
 
       expect(mockRes.status).toHaveBeenCalledWith(200);
-      expect(mockRes.send).toHaveBeenCalledWith({
+      expect(mockRes.json).toHaveBeenCalledWith({
+        connected: true,
         user: mockUserData.data,
         artists: mockArtistsData.data,
-        token: mockTokenData.data,
       });
     });
 
-    it("should handle missing parameters", async () => {
+    it("should handle unauthenticated user and return auth URL", async () => {
+      const mockAuthUrl = "https://accounts.spotify.com/authorize...";
+      const error = {
+        isAxiosError: true,
+        response: { status: 401 },
+      };
+
+      // First Promise.all call fails with 401
+      (axios.get as jest.Mock)
+        .mockRejectedValueOnce(error)
+        .mockRejectedValueOnce(error)
+        // Auth URL request succeeds
+        .mockResolvedValueOnce({ data: { authUrl: mockAuthUrl } });
+
+      await discordBotController.fetchUserInfo(
+        mockReq as Request,
+        mockRes as Response
+      );
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        connected: false,
+        authUrl: mockAuthUrl,
+        message: "Click this link to connect your Spotify account",
+      });
+    });
+
+    it("should handle missing discord_id", async () => {
       mockReq.params = {};
 
       await discordBotController.fetchUserInfo(
@@ -64,46 +98,27 @@ describe("DiscordBotControllers", () => {
       );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.send).toHaveBeenCalledWith(
-        "Username or Discord ID is required"
-      );
+      expect(mockRes.send).toHaveBeenCalledWith("Discord ID is required");
     });
 
-    it("should handle API errors", async () => {
-      const error = new Error("API Error");
-      (axios.post as jest.Mock).mockRejectedValueOnce(error);
+    it("should handle unexpected errors", async () => {
+      const error = new Error("Unexpected error");
+      (axios.get as jest.Mock).mockRejectedValueOnce(error);
 
       await discordBotController.fetchUserInfo(
         mockReq as Request,
         mockRes as Response
       );
 
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        "Error in fetchUserInfo:",
+        error
+      );
       expect(mockRes.status).toHaveBeenCalledWith(500);
-      expect(mockRes.send).toHaveBeenCalledWith("Failed to save user profile");
-    });
-
-    it("should make API calls with correct URLs", async () => {
-      const mockData = { data: {} };
-      (axios.post as jest.Mock).mockResolvedValueOnce(mockData);
-      (axios.get as jest.Mock)
-        .mockResolvedValueOnce(mockData)
-        .mockResolvedValueOnce(mockData);
-
-      await discordBotController.fetchUserInfo(
-        mockReq as Request,
-        mockRes as Response
-      );
-
-      expect(axios.post).toHaveBeenCalledWith(
-        "http://localhost:3000/api/v1/spotify/store-token/123456"
-      );
-      expect(axios.get).toHaveBeenCalledWith(
-        "http://localhost:3000/api/v1/spotify/get_profile/testuser"
-      );
-      expect(axios.get).toHaveBeenCalledWith(
-        "http://localhost:3000/api/v1/spotify/get_top_artists/testuser"
-      );
+      expect(mockRes.json).toHaveBeenCalledWith({
+        error: "Something went wrong",
+        message: "Failed to process your request",
+      });
     });
   });
 });
