@@ -21,7 +21,6 @@ interface SpotifyArtist {
   name: string;
   genres: string[];
   popularity: number;
-  images?: { url: string }[];
 }
 
 export class SpotifyService {
