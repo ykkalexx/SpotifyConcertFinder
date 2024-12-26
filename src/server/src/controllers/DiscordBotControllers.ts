@@ -14,7 +14,6 @@ export class DiscordBotControllers {
       }
 
       try {
-        // Try to get user data first
         const [userResponse, artistsResponse] = await Promise.all([
           axios.get(`${this.backendUrl}/spotify/profile/${discord_id}`),
           axios.get(`${this.backendUrl}/spotify/top-artists/${discord_id}`),
@@ -26,20 +25,17 @@ export class DiscordBotControllers {
           artists: artistsResponse.data,
         });
       } catch (error) {
-        // If unauthorized, get auth URL
         if (axios.isAxiosError(error) && error.response?.status === 401) {
-          const authResponse = await axios.get(
-            `${this.backendUrl}/spotify/auth/${discord_id}`
-          );
-
+          // User needs to authenticate
+          const authUrl = `${this.backendUrl}/spotify/auth/${discord_id}`;
           res.status(200).json({
             connected: false,
-            authUrl: authResponse.data.authUrl,
-            message: "Click this link to connect your Spotify account",
+            authUrl,
+            message: "🎵 Connect your Spotify account",
           });
           return;
         }
-        throw error; // Re-throw other errors
+        throw error;
       }
     } catch (error) {
       logger.error("Error in fetchUserInfo:", error);

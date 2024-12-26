@@ -11,7 +11,7 @@ export class SpotifyController {
     this.spotifyService = new SpotifyService();
     this.redirectUri =
       process.env.SPOTIFY_REDIRECT_URI ||
-      "http://localhost:3000/api/spotify/callback";
+      "http://localhost:3000/api/v1/spotify/callback";
   }
 
   initiateAuth = async (req: Request, res: Response): Promise<void> => {

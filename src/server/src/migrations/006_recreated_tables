@@ -1,0 +1,39 @@
+CREATE TABLE user_tokens (
+    discord_id VARCHAR(255) PRIMARY KEY,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    discord_id VARCHAR(255) UNIQUE NOT NULL,
+    spotify_id VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE artists (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    spotify_id VARCHAR(255) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    genres JSON,
+    popularity INT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE user_artists (
+    user_id INT,
+    artist_id INT,
+    last_listened DATETIME NOT NULL,
+    play_count INT DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, artist_id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (artist_id) REFERENCES artists(id)
+);
