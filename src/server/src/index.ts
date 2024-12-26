@@ -14,8 +14,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // setup router
-app.use("/api/v1", spotifyRoutes);
-app.use("/api/v1", discordBotRoutes);
+app.use("/api/v1/spotify", spotifyRoutes);
+app.use("/api/v1/discord", discordBotRoutes);
 
 async function startServer() {
   try {

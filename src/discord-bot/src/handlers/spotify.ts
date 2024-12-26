@@ -1,7 +1,7 @@
-import { ChatInputCommandInteraction } from "discord.js";
-import axios from "axios";
+import { ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
+import axios, { AxiosError } from "axios";
 
-const BACKEND_URL = process.env.BACKEND_URL;
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000/api/v1";
 
 export async function handleSpotifyCommand(
   interaction: ChatInputCommandInteraction
@@ -9,51 +9,62 @@ export async function handleSpotifyCommand(
   try {
     await interaction.deferReply({ ephemeral: true });
 
-    const response = await axios.get(
-      `${BACKEND_URL}/spotify/profile/${interaction.user.id}`
-    );
-
-    if (response.data.connected) {
-      // user if already connected to spotify, will show the user's profile
-      const { user, artists } = response.data;
-      const artistsList = artists
-        .map((artist: any) => `• ${artist.name}`)
-        .join("\n");
-
-      await interaction.editReply({
-        content:
-          `**Spotify Profile**\n` +
-          `Name: ${user.display_name}\n\n` +
-          `**Top Artists**\n${artistsList}`,
-      });
-    } else {
-      // the user needs to connect their account
-      const authResponse = await axios.get(
-        `${BACKEND_URL}/spotify/auth/${interaction.user.id}`
+    try {
+      const response = await axios.get(
+        `${BACKEND_URL}/discord/fetch_user_info/${interaction.user.id}`
       );
 
-      await interaction.editReply({
-        content:
-          `Click this link to connect your Spotify account:\n` +
-          `${authResponse.data.authUrl}\n\n` +
-          `After connecting, use /spotify again to see your profile!`,
-      });
+      if (response.data.connected) {
+        // User is connected - show profile
+        const embed = new EmbedBuilder()
+          .setTitle("Spotify Profile")
+          .setColor("#1DB954") // Spotify green
+          .addFields(
+            { name: "Profile", value: response.data.user.display_name },
+            {
+              name: "Top Artists",
+              value:
+                response.data.artists
+                  .map((artist: any) => `• ${artist.name}`)
+                  .join("\n") || "No top artists found",
+            }
+          );
+
+        await interaction.editReply({ embeds: [embed] });
+      } else {
+        // User needs to connect - show auth URL
+        const embed = new EmbedBuilder()
+          .setTitle("Connect Spotify")
+          .setColor("#1DB954")
+          .setDescription(
+            "Click the link below to connect your Spotify account:"
+          )
+          .addFields({
+            name: "Authentication Link",
+            value: response.data.authUrl,
+          });
+
+        await interaction.editReply({ embeds: [embed] });
+      }
+    } catch (error) {
+      console.error("Spotify command error:", error);
+
+      const errorEmbed = new EmbedBuilder()
+        .setTitle("Error")
+        .setColor("#FF0000")
+        .setDescription(
+          "Failed to connect to Spotify. Please try again later."
+        );
+
+      await interaction.editReply({ embeds: [errorEmbed] });
     }
   } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      const authResponse = await axios.get(
-        `${BACKEND_URL}/spotify/auth/${interaction.user.id}`
-      );
-
-      await interaction.editReply({
-        content:
-          `Please connect your Spotify account first!\n` +
-          `Click here to connect: ${authResponse.data.authUrl}`,
+    console.error("Critical error:", error);
+    if (!interaction.replied) {
+      await interaction.reply({
+        content: "A critical error occurred. Please try again.",
+        ephemeral: true,
       });
-    } else {
-      await interaction.editReply(
-        "Sorry, there was an error processing your request!"
-      );
     }
   }
 }
