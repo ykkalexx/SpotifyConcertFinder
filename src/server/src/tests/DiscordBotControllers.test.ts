@@ -6,6 +6,11 @@ import { logger } from "../utils/logger";
 jest.mock("axios");
 jest.mock("../utils/logger");
 
+jest.mock("axios", () => ({
+  ...jest.requireActual("axios"),
+  get: jest.fn(),
+}));
+
 describe("DiscordBotControllers", () => {
   let discordBotController: DiscordBotControllers;
   let mockReq: Partial<Request>;
@@ -67,14 +72,12 @@ describe("DiscordBotControllers", () => {
       const error = {
         isAxiosError: true,
         response: { status: 401 },
+        message: "Unauthorized",
       };
 
-      // First Promise.all call fails with 401
       (axios.get as jest.Mock)
         .mockRejectedValueOnce(error)
-        .mockRejectedValueOnce(error)
-        // Auth URL request succeeds
-        .mockResolvedValueOnce({ data: { authUrl: mockAuthUrl } });
+        .mockRejectedValueOnce(error);
 
       await discordBotController.fetchUserInfo(
         mockReq as Request,
@@ -84,8 +87,8 @@ describe("DiscordBotControllers", () => {
       expect(mockRes.status).toHaveBeenCalledWith(200);
       expect(mockRes.json).toHaveBeenCalledWith({
         connected: false,
-        authUrl: mockAuthUrl,
-        message: "Click this link to connect your Spotify account",
+        authUrl: expect.any(String),
+        message: "🎵 Connect your Spotify account",
       });
     });
 

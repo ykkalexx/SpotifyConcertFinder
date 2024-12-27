@@ -17,9 +17,9 @@ export async function handleConcertsCommand(
     if (response.data.success) {
       const concerts = response.data.concerts;
 
-      // Split concerts into chunks of 2
+      // Split concerts into chunks of 5
       // due to rate limit of ticketmaster api
-      const embedFields = concerts.slice(0, 2).map((concert: any) => ({
+      const embedFields = concerts.slice(0, 5).map((concert: any) => ({
         name: concert.name,
         value: `Date: ${concert.date}\nVenue: ${concert.venue}, ${
           concert.city
@@ -32,7 +32,7 @@ export async function handleConcertsCommand(
         .setTitle("Upcoming Concerts")
         .setColor("#FF0000")
         .setDescription(
-          `Found ${concerts.length} concerts for your top artists. Showing first 20:`
+          `Found ${concerts.length} concerts for your top artists. Showing first 5:`
         )
         .addFields(embedFields);
 
