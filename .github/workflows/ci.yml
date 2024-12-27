@@ -32,9 +32,27 @@ jobs:
         with:
           node-version: "18"
           cache: "npm"
-          cache-dependency-path: |
-            src/server/package-lock.json
-            src/discord-bot/package-lock.json
+
+      - name: Setup Server Environment
+        working-directory: ./src/server
+        run: |
+          cp .env.example .env
+          echo "DB_HOST=localhost" >> .env
+          echo "DB_USER=root" >> .env
+          echo "DB_PASSWORD=alexandru123" >> .env
+          echo "DB_NAME=spotify_concert" >> .env
+          echo "NODE_ENV=test" >> .env
+          echo "SPOTIFY_CLIENT_ID=test-client-id" >> .env
+          echo "SPOTIFY_CLIENT_SECRET=test-client-secret" >> .env
+          echo "TICKETMASTER_API_KEY=test-api-key" >> .env
+
+      - name: Setup Discord Bot Environment
+        working-directory: ./src/discord-bot
+        run: |
+          cp .env.example .env
+          echo "DISCORD_TOKEN=test-token" >> .env
+          echo "CLIENT_ID=test-client-id" >> .env
+          echo "BACKEND_URL=http://localhost:3000/api/v1" >> .env
 
       - name: Install Server Dependencies
         working-directory: ./src/server
@@ -44,28 +62,14 @@ jobs:
         working-directory: ./src/discord-bot
         run: npm ci
 
-      - name: Setup Test DB
+      - name: Run Server Tests
         working-directory: ./src/server
-        run: |
-          cp .env.example .env
-          npm run migrate
-
-      - name: Run Tests
-        working-directory: ./src/server
-        env:
-          DB_HOST: localhost
-          DB_USER: root
-          DB_PASSWORD: alexandru123
-          DB_NAME: spotify_concert
-          NODE_ENV: test
-          SPOTIFY_CLIENT_ID: test-client-id
-          SPOTIFY_CLIENT_SECRET: test-client-secret
-          TICKETMASTER_API_KEY: test-api-key
         run: npm test -- --coverage
 
-      - name: TypeScript Check
-        working-directory: ./src/server
-        run: npm run build
+      - name: Run TypeScript Checks
+        run: |
+          cd src/server && npm run build
+          cd ../discord-bot && npm run build
 
       - name: Upload Coverage
         uses: actions/upload-artifact@v3

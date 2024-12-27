@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  server:
+    build: ./src/server
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - DB_HOST=mysql
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
+      - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
+      - TICKETMASTER_API_KEY=${TICKETMASTER_API_KEY}
+    ports:
+      - "3000:3000"
+
+  discord-bot:
+    build: ./src/discord-bot
+    depends_on:
+      - server
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - CLIENT_ID=${CLIENT_ID}
+      - BACKEND_URL=http://server:3000/api/v1
+
+volumes:
+  mysql-data:
