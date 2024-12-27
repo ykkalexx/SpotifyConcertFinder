@@ -2,10 +2,10 @@ A Discord bot that fetches your top Spotify artists and finds nearby concerts us
 
 ## Tech Stack
 
-**Backend**: Node.js with TypeScript
-**Database**: MySQL
-**API Integration**: Spotify API , Ticketmaster API
-**Other Major Libraries**: Discord.js
+- **Backend**: Node.js with TypeScript
+- **Database**: MySQL
+- **API Integration**: Spotify API , Ticketmaster API
+- **Other Major Libraries**: Discord.js
 
 ## Installation
 
@@ -32,3 +32,7 @@ Examples of both  .env files can be found /server and /discord-bot
 - Ticketmaster Developer Account: Obtain an API key from the Ticketmaster Developer Portal.
 - Discord Bot: Invite the bot to your server using a generated OAuth2 link.
 - npm/yarn: Ensure one of these package managers is installed.
+
+## Documentation
+
+In the documentation folder `docs` different information can be found about this project
