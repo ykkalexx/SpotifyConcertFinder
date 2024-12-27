@@ -9,5 +9,5 @@
 
 ### Discord Bot:
 
-- !connect to get user information into database depending on who called the bot will be saved
-- !findconcerts to get a list of nearby concerts depending on who called the bot
+- /spotify to get user information into database depending on who called the bot will be saved
+- /findconcert to get a list of nearby concerts depending on who called the bot

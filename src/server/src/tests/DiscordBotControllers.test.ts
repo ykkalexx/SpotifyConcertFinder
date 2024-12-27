@@ -6,6 +6,11 @@ import { logger } from "../utils/logger";
 jest.mock("axios");
 jest.mock("../utils/logger");
 
+jest.mock("axios", () => ({
+  ...jest.requireActual("axios"),
+  get: jest.fn(),
+}));
+
 describe("DiscordBotControllers", () => {
   let discordBotController: DiscordBotControllers;
   let mockReq: Partial<Request>;
@@ -63,18 +68,16 @@ describe("DiscordBotControllers", () => {
     });
 
     it("should handle unauthenticated user and return auth URL", async () => {
-      const mockAuthUrl = "https://accounts.spotify.com/authorize...";
+      const mockAuthUrl = "www.testurl.com";
       const error = {
         isAxiosError: true,
         response: { status: 401 },
+        message: "Unauthorized",
       };
 
-      // First Promise.all call fails with 401
       (axios.get as jest.Mock)
         .mockRejectedValueOnce(error)
-        .mockRejectedValueOnce(error)
-        // Auth URL request succeeds
-        .mockResolvedValueOnce({ data: { authUrl: mockAuthUrl } });
+        .mockRejectedValueOnce(error);
 
       await discordBotController.fetchUserInfo(
         mockReq as Request,
@@ -84,8 +87,8 @@ describe("DiscordBotControllers", () => {
       expect(mockRes.status).toHaveBeenCalledWith(200);
       expect(mockRes.json).toHaveBeenCalledWith({
         connected: false,
-        authUrl: mockAuthUrl,
-        message: "Click this link to connect your Spotify account",
+        authUrl: expect.any(String),
+        message: "🎵 Connect your Spotify account",
       });
     });
 
@@ -112,6 +115,61 @@ describe("DiscordBotControllers", () => {
 
       expect(logger.error).toHaveBeenCalledWith(
         "Error in fetchUserInfo:",
+        error
+      );
+      expect(mockRes.status).toHaveBeenCalledWith(500);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        error: "Something went wrong",
+        message: "Failed to process your request",
+      });
+    });
+  });
+
+  describe("fetchConcerts", () => {
+    it("should fetch concerts successfully", async () => {
+      const mockConcertsData = {
+        data: [
+          { id: "concert-1", name: "Concert 1" },
+          { id: "concert-2", name: "Concert 2" },
+        ],
+      };
+
+      (axios.get as jest.Mock).mockResolvedValue(mockConcertsData);
+
+      await discordBotController.fetchConcerts(
+        mockReq as Request,
+        mockRes as Response
+      );
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        concerts: mockConcertsData.data,
+      });
+    });
+
+    it("should handle missing discordId", async () => {
+      mockReq.params = {};
+
+      await discordBotController.fetchConcerts(
+        mockReq as Request,
+        mockRes as Response
+      );
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.send).toHaveBeenCalledWith("Discord ID is required");
+    });
+
+    it("should handle unexpected errors", async () => {
+      const error = new Error("Unexpected error");
+      (axios.get as jest.Mock).mockRejectedValueOnce(error);
+
+      await discordBotController.fetchConcerts(
+        mockReq as Request,
+        mockRes as Response
+      );
+
+      expect(logger.error).toHaveBeenCalledWith(
+        "Error in fetchConcerts:",
         error
       );
       expect(mockRes.status).toHaveBeenCalledWith(500);

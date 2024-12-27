@@ -45,4 +45,27 @@ export class DiscordBotControllers {
       });
     }
   }
+
+  async fetchConcerts(req: Request, res: Response): Promise<void> {
+    try {
+      const { discord_id } = req.params;
+      if (!discord_id) {
+        res.status(400).send("Discord ID is required");
+      }
+
+      const concertsResponse = await axios.get(
+        `${this.backendUrl}/ticketmaster/events/${discord_id}`
+      );
+
+      res.status(200).json({
+        concerts: concertsResponse.data,
+      });
+    } catch (error) {
+      logger.error("Error in fetchConcerts:", error);
+      res.status(500).json({
+        error: "Something went wrong",
+        message: "Failed to process your request",
+      });
+    }
+  }
 }

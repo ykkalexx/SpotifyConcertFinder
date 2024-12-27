@@ -5,4 +5,10 @@ export const commands = [
     .setName("spotify")
     .setDescription("Connect your Spotify account or view your profile")
     .toJSON(),
+  new SlashCommandBuilder()
+    .setName("concerts")
+    .setDescription(
+      "Get concert recommendations based on your Spotify top artists"
+    )
+    .toJSON(),
 ];
