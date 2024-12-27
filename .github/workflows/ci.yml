@@ -32,6 +32,9 @@ jobs:
         with:
           node-version: "18"
           cache: "npm"
+          cache-dependency-path: |
+            src/server/package-lock.json
+            src/discord-bot/package-lock.json
 
       - name: Setup Server Environment
         working-directory: ./src/server
