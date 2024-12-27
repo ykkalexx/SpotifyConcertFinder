@@ -49,7 +49,7 @@ export class DiscordBotControllers {
   async fetchConcerts(req: Request, res: Response): Promise<void> {
     try {
       const { discord_id } = req.params;
-      if (discord_id) {
+      if (!discord_id) {
         res.status(400).send("Discord ID is required");
       }
 
