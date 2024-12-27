@@ -42,11 +42,16 @@ export class TicketmasterService {
   private readonly rootUrl: string =
     "https://app.ticketmaster.com/discovery/v2/events";
   private spotifyService: SpotifyService;
+  private rateLimitDelay = 1000; // 1000ms delay between requests due to ticketmaster rate limit
 
   constructor() {
     this.apiKey = process.env.TICKETMASTER_API_KEY as string;
     this.spotifyService = new SpotifyService();
     if (!this.apiKey) throw new Error("Ticketmaster API key is required");
+  }
+
+  private async delayRequest(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, this.rateLimitDelay));
   }
 
   async searchConcertsByArtist(
@@ -56,12 +61,19 @@ export class TicketmasterService {
     endDate?: string
   ): Promise<TicketmasterEvent[]> {
     try {
+      await this.delayRequest();
+
+      // added so it only fetches future concerts
+      // limited to 1 concert due to api limitations
+      const today = new Date().toISOString().split(".")[0] + "Z";
+
       const params = new URLSearchParams({
         apikey: this.apiKey,
         keyword: artistName,
         classificationName: "music",
-        size: "20",
+        size: "1",
         sort: "date,asc",
+        startDateTime: startDate || today,
       });
 
       if (city) params.append("city", city);
@@ -82,16 +94,21 @@ export class TicketmasterService {
   async getTopArtistConcerts(discordId: string): Promise<TicketmasterEvent[]> {
     try {
       const topArtists = await this.spotifyService.getUserTopArtists(discordId);
-      const concertPromises = topArtists.map((artist) =>
-        this.searchConcertsByArtist(artist.name)
-      );
+      const concerts: TicketmasterEvent[] = [];
 
-      const concertResults = await Promise.all(concertPromises);
-      return concertResults.flat().sort((a, b) => {
-        const dateA = new Date(a.dates.start.dateTime);
-        const dateB = new Date(b.dates.start.dateTime);
-        return dateA.getTime() - dateB.getTime();
-      });
+      // Take only top 5 artists
+      for (const artist of topArtists.slice(0, 5)) {
+        const artistConcerts = await this.searchConcertsByArtist(artist.name);
+        concerts.push(...artistConcerts);
+      }
+
+      return concerts
+        .sort((a, b) => {
+          const dateA = new Date(a.dates.start.dateTime);
+          const dateB = new Date(b.dates.start.dateTime);
+          return dateA.getTime() - dateB.getTime();
+        })
+        .slice(0, 20);
     } catch (error) {
       logger.error("Error fetching artist concerts:", error);
       throw new Error("Failed to get concerts for top artists");

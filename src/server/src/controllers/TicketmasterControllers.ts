@@ -11,15 +11,15 @@ export class TicketmasterControllers {
 
   getConcerts = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { discord_id } = req.params;
+      const { discordId } = req.params;
 
-      if (!discord_id) {
+      if (!discordId) {
         res.status(400).json({ error: "Discord ID is required" });
         return;
       }
 
       const concerts = await this.ticketmasterService.getTopArtistConcerts(
-        discord_id
+        discordId
       );
 
       res.status(200).json({
