@@ -4,6 +4,7 @@ import { closePool, initDB } from "./config/database";
 import { logger } from "./utils/logger";
 import spotifyRoutes from "./routes/spotifyRoutes";
 import discordBotRoutes from "./routes/discordBotRoutes";
+import ticketmasterRoutes from "./routes/ticketmasterRoutes";
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 // setup router
 app.use("/api/v1/spotify", spotifyRoutes);
 app.use("/api/v1/discord", discordBotRoutes);
+app.use("/api/v1/ticketmaster", ticketmasterRoutes);
 
 async function startServer() {
   try {

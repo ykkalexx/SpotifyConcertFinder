@@ -1,5 +1,6 @@
 import { logger } from "../utils/logger";
 import axios from "axios";
+import { SpotifyService } from "../service/SpotifyService";
 
 export interface TicketmasterEvent {
   id: string;
@@ -40,12 +41,12 @@ export class TicketmasterService {
   private readonly apiKey: string;
   private readonly rootUrl: string =
     "https://app.ticketmaster.com/discovery/v2/events";
+  private spotifyService: SpotifyService;
 
   constructor() {
-    this.apiKey = process.env.TICKETMASTER_API_KEY || "";
-    if (!this.apiKey) {
-      throw new Error("Ticketmaster API key is required");
-    }
+    this.apiKey = process.env.TICKETMASTER_API_KEY as string;
+    this.spotifyService = new SpotifyService();
+    if (!this.apiKey) throw new Error("Ticketmaster API key is required");
   }
 
   async searchConcertsByArtist(
@@ -78,21 +79,22 @@ export class TicketmasterService {
     }
   }
 
-  async getEventDetails(eventId: string): Promise<TicketmasterEvent> {
+  async getTopArtistConcerts(discordId: string): Promise<TicketmasterEvent[]> {
     try {
-      const response = await axios.get<TicketmasterEvent>(
-        `${this.rootUrl}/${eventId}`,
-        {
-          params: {
-            apikey: this.apiKey,
-          },
-        }
+      const topArtists = await this.spotifyService.getUserTopArtists(discordId);
+      const concertPromises = topArtists.map((artist) =>
+        this.searchConcertsByArtist(artist.name)
       );
 
-      return response.data;
+      const concertResults = await Promise.all(concertPromises);
+      return concertResults.flat().sort((a, b) => {
+        const dateA = new Date(a.dates.start.dateTime);
+        const dateB = new Date(b.dates.start.dateTime);
+        return dateA.getTime() - dateB.getTime();
+      });
     } catch (error) {
-      logger.error("Error fetching event details:", error);
-      throw new Error("Failed to fetch event details from Ticketmaster");
+      logger.error("Error fetching artist concerts:", error);
+      throw new Error("Failed to get concerts for top artists");
     }
   }
 }
